@@ -1,0 +1,129 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>FacturePro — Prototype V1</title>
+<style>
+:root{--blue:#1769ff;--navy:#102a56;--bg:#f4f7fb;--card:#fff;--text:#14213d;--muted:#6b7890;--border:#dfe6f0}
+*{box-sizing:border-box}body{margin:0;font-family:Arial,sans-serif;background:var(--bg);color:var(--text)}
+header{background:linear-gradient(135deg,#0c2147,#1769ff);color:#fff;padding:18px 16px;position:sticky;top:0;z-index:2}
+.brand{font-size:24px;font-weight:800}.brand span{color:#7db0ff}.tag{font-size:12px;opacity:.85}
+main{max-width:760px;margin:auto;padding:16px}.screen{display:none}.screen.active{display:block}
+.card{background:var(--card);border:1px solid var(--border);border-radius:16px;padding:16px;margin-bottom:14px;box-shadow:0 4px 18px #102a560c}
+h2{margin:4px 0 14px;font-size:21px}.muted{color:var(--muted);font-size:13px}
+.grid{display:grid;grid-template-columns:1fr 1fr;gap:10px}.stat{padding:15px;border-radius:14px;background:#eef4ff}.stat b{display:block;font-size:24px;color:var(--navy)}
+button{border:0;border-radius:11px;padding:12px 14px;font-weight:700;cursor:pointer}.primary{background:var(--blue);color:#fff}.secondary{background:#eef3fb;color:var(--navy)}.danger{background:#fff0f0;color:#b42318}
+input,select{width:100%;padding:12px;border:1px solid var(--border);border-radius:10px;margin:5px 0 12px;font-size:15px;background:#fff}
+label{font-size:13px;font-weight:700}.row{display:flex;gap:8px;align-items:center}.row>*{flex:1}
+nav{position:fixed;bottom:0;left:0;right:0;background:#fff;border-top:1px solid var(--border);display:flex;justify-content:center;z-index:3}
+nav button{border-radius:0;background:#fff;color:var(--muted);padding:12px 18px;flex:1;max-width:190px}nav button.active{color:var(--blue);font-weight:800}
+.item{padding:12px 0;border-bottom:1px solid var(--border)}.item:last-child{border:0}
+.invoice{background:#fff;border:1px solid #d9e0ea;padding:22px;max-width:680px;margin:auto}.invoice h1{color:var(--blue)}
+.right{text-align:right}.total{font-size:20px;font-weight:800}.small{font-size:12px}
+@media print{header,nav,.no-print{display:none!important}body{background:#fff}.screen{display:none}.screen#invoiceScreen{display:block!important}.invoice{border:0}}
+</style>
+
+<!-- FACTUREPRO SUPABASE CONFIG -->
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script>
+  const SUPABASE_URL = "https://cfsabkweqaxtylmbobsw.supabase.co";
+  // Colle ici ta PUBLISHABLE KEY. Ne mets jamais la Secret key.
+  const SUPABASE_PUBLISHABLE_KEY = "COLLE_TA_PUBLISHABLE_KEY_ICI";
+
+  const facturesupabase = window.supabase.createClient(
+    SUPABASE_URL,
+    SUPABASE_PUBLISHABLE_KEY
+  );
+</script>
+
+</head>
+<body>
+<header><div class="brand">Facture<span>Pro</span></div><div class="tag">Créez • Gérez • Envoyez vos factures simplement</div></header>
+<main>
+<section id="home" class="screen active">
+<div class="card"><h2>Bienvenue 👋</h2><div class="muted">Votre mini-outil de facturation, directement sur votre téléphone.</div></div>
+<div class="grid">
+<div class="stat">Factures<b id="statInvoices">0</b></div><div class="stat">Clients<b id="statClients">0</b></div>
+</div>
+<div class="card" style="margin-top:14px"><button class="primary" style="width:100%" onclick="show('new')">＋ Créer une facture</button></div>
+<div class="card"><h2>Dernières factures</h2><div id="recent"></div></div>
+</section>
+
+<section id="new" class="screen">
+<div class="card">
+<h2>Nouvelle facture</h2>
+<label>Nom de votre entreprise</label><input id="business" placeholder="Ex. JM Services">
+<label>Nom du client</label><input id="client" placeholder="Ex. Jean Doe">
+<label>Produit / service</label><input id="product" placeholder="Ex. T-shirt">
+<div class="row"><div><label>Quantité</label><input id="qty" type="number" value="1" min="1"></div><div><label>Prix unitaire ($)</label><input id="price" type="number" value="0" min="0" step="0.01"></div></div>
+<label>TVA (%) — facultatif</label><input id="tax" type="number" value="0" min="0" step="0.01">
+<div class="row"><button class="secondary" onclick="show('home')">Annuler</button><button class="primary" onclick="createInvoice()">Créer la facture</button></div>
+</div>
+</section>
+
+<section id="invoices" class="screen">
+<div class="card"><h2>Mes factures</h2><div id="invoiceList"></div></div>
+</section>
+
+<section id="clients" class="screen">
+<div class="card"><h2>Mes clients</h2><div id="clientList"></div></div>
+</section>
+
+<section id="invoiceScreen" class="screen">
+<div class="no-print row" style="margin-bottom:12px"><button class="secondary" onclick="show('home')">← Retour</button><button class="primary" onclick="window.print()">Télécharger / Imprimer PDF</button></div>
+<div class="invoice" id="invoicePreview"></div>
+</section>
+</main>
+<nav>
+<button onclick="show('home')" id="nav-home">Accueil</button>
+<button onclick="show('invoices')" id="nav-invoices">Factures</button>
+<button onclick="show('clients')" id="nav-clients">Clients</button>
+<button onclick="show('new')" id="nav-new">＋ Créer</button>
+</nav>
+<script>
+let data=JSON.parse(localStorage.getItem('facturepro')||'{"invoices":[],"clients":[]}');
+let current=null;
+const $=id=>document.getElementById(id);
+function save(){localStorage.setItem('facturepro',JSON.stringify(data));render();}
+function money(n){return Number(n).toFixed(2)+' $'}
+function show(id){
+ document.querySelectorAll('.screen').forEach(x=>x.classList.remove('active'));
+ $(id).classList.add('active');
+ document.querySelectorAll('nav button').forEach(x=>x.classList.remove('active'));
+ const n=$('nav-'+id); if(n)n.classList.add('active');
+ render();
+}
+function createInvoice(){
+ const business=$('business').value.trim()||'Mon entreprise';
+ const client=$('client').value.trim()||'Client';
+ const product=$('product').value.trim()||'Service';
+ const qty=Number($('qty').value)||1, price=Number($('price').value)||0, tax=Number($('tax').value)||0;
+ const sub=qty*price, total=sub+(sub*tax/100);
+ const inv={id:'F-'+new Date().getFullYear()+'-'+String(data.invoices.length+1).padStart(3,'0'),date:new Date().toLocaleDateString('fr-FR'),business,client,product,qty,price,tax,total};
+ data.invoices.unshift(inv);
+ if(!data.clients.includes(client))data.clients.unshift(client);
+ current=inv; save(); showInvoice(inv);
+}
+function showInvoice(inv){
+ current=inv;
+ $('invoicePreview').innerHTML=`
+ <div class="row"><div><h1>FacturePro</h1><b>${esc(inv.business)}</b></div><div class="right"><b>FACTURE</b><br>${inv.id}<br>${inv.date}</div></div>
+ <hr><p><b>Client</b><br>${esc(inv.client)}</p>
+ <table style="width:100%;border-collapse:collapse"><tr><th style="text-align:left;border-bottom:1px solid #ddd;padding:8px">Produit / Service</th><th>Qté</th><th>Prix</th><th>Total</th></tr>
+ <tr><td style="padding:8px">${esc(inv.product)}</td><td style="text-align:center">${inv.qty}</td><td style="text-align:right">${money(inv.price)}</td><td style="text-align:right">${money(inv.qty*inv.price)}</td></tr></table>
+ <hr><div class="right">Sous-total : ${money(inv.qty*inv.price)}<br>TVA : ${inv.tax}%<br><span class="total">Total : ${money(inv.total)}</span></div>
+ <p class="small" style="margin-top:35px">Merci pour votre confiance. Généré avec FacturePro.</p>`;
+ show('invoiceScreen');
+}
+function esc(s){return String(s).replace(/[&<>"']/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]))}
+function render(){
+ $('statInvoices').textContent=data.invoices.length;
+ $('statClients').textContent=data.clients.length;
+ $('recent').innerHTML=data.invoices.slice(0,5).map(i=>`<div class="item"><b>${esc(i.id)}</b> — ${esc(i.client)} <span style="float:right">${money(i.total)}</span></div>`).join('')||'<div class="muted">Aucune facture pour le moment.</div>';
+ $('invoiceList').innerHTML=data.invoices.map(i=>`<div class="item"><b>${esc(i.id)}</b><br><span class="muted">${esc(i.client)} · ${i.date}</span><span style="float:right"><b>${money(i.total)}</b> <button class="secondary" onclick='showInvoice(${JSON.stringify(i)})'>Voir</button></span></div>`).join('')||'<div class="muted">Crée ta première facture.</div>';
+ $('clientList').innerHTML=data.clients.map(c=>`<div class="item">👤 ${esc(c)}</div>`).join('')||'<div class="muted">Tes clients apparaîtront ici.</div>';
+}
+render();
+</script>
+</body></html>
